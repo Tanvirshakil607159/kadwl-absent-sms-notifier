@@ -22,7 +22,7 @@ test("Company branding, clean initial state, keyboard dialog, and reduced motion
   ).toBeVisible();
   await expect(page.locator("link[rel=icon]")).toHaveAttribute(
     "href",
-    "/company-logo.png",
+    /company-logo\.png$/,
   );
   await page.getByRole("tab", { name: /Attendance/ }).click();
   await expect(

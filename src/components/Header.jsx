@@ -86,7 +86,7 @@ export default function Header({
           }}
         >
           <img
-            src="/company-logo.png"
+            src="./company-logo.png"
             alt="K.A. Design Wear Ltd. company logo"
           />
           <div>

@@ -1,0 +1,20 @@
+Nikosh Regular, Version 001.000
+
+Source: https://www.omicronlab.com/download/fonts/Nikosh.ttf
+Catalog: https://www.omicronlab.com/bangla-fonts.html
+
+Nikosh font developed by The Election Commission of Bangladesh.
+Latin glyphs Incorporated are from modified DejaVu font project's DejaVu Serif.
+Bangla Glyphs design by: Jowad Kazi
+Core Developers: Jowad Kazi, Omi Azad, Mozammel Sarker
+
+NikoshBangla font is being Released under Creative Common License (CCL).
+https://creativecommons.org/licenses/by-nc-nd/3.0/
+
+The embedded source license identifies CC BY-NC-ND 3.0. Commercial deployment
+requires appropriate permission from the font rights holder.
+
+Web compatibility: malformed font naming metadata was rebuilt because Chromium's
+OpenType sanitizer rejected the original name records. No glyph, outline,
+character mapping, or shaping tables were changed. The source attribution and
+license URI are preserved in the corrected name table and this notice.

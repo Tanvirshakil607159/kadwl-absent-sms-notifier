@@ -13,7 +13,7 @@ import {
   ChevronRight,
   Trash2,
 } from "lucide-react";
-import { normalizePhoneNumber } from "../utils/smsUtils";
+import { matchesIdRange, normalizePhoneNumber } from "../utils/smsUtils";
 export default function AbsentTable({
   records,
   selectedIds,
@@ -29,6 +29,8 @@ export default function AbsentTable({
   busy,
 }) {
   const [search, setSearch] = useState("");
+  const [fromId, setFromId] = useState("");
+  const [toId, setToId] = useState("");
   const [line, setLine] = useState("");
   const [shift, setShift] = useState("");
   const [sort, setSort] = useState({ field: "sl", asc: true });
@@ -53,6 +55,7 @@ export default function AbsentTable({
             return false;
           if ((line && r.line !== line) || (shift && r.shift !== shift))
             return false;
+          if (!matchesIdRange(r.employeeId, fromId, toId)) return false;
           return (
             activeQuickFilter === "all" ||
             (activeQuickFilter === "1day" && r.absentDays === 1) ||
@@ -71,7 +74,7 @@ export default function AbsentTable({
               : String(a[sort.field]).localeCompare(String(b[sort.field]))) *
             (sort.asc ? 1 : -1),
         ),
-    [records, search, line, shift, activeQuickFilter, sort],
+    [records, search, fromId, toId, line, shift, activeQuickFilter, sort],
   );
   const pages = Math.max(1, Math.ceil(filtered.length / 10));
   const currentPage = Math.min(page, pages - 1);
@@ -85,6 +88,8 @@ export default function AbsentTable({
   }
   function reset() {
     setSearch("");
+    setFromId("");
+    setToId("");
     setLine("");
     setShift("");
     setActiveQuickFilter("all");
@@ -128,6 +133,32 @@ export default function AbsentTable({
             }}
           />
         </label>
+        <div className="id-range-row">
+          <label className="id-range-field">
+            <span>From ID</span>
+            <input
+              aria-label="Filter from ID"
+              placeholder="e.g. KADW1000"
+              value={fromId}
+              onChange={(e) => {
+                setFromId(e.target.value);
+                setPage(0);
+              }}
+            />
+          </label>
+          <label className="id-range-field">
+            <span>To ID</span>
+            <input
+              aria-label="Filter to ID"
+              placeholder="e.g. KADW2000"
+              value={toId}
+              onChange={(e) => {
+                setToId(e.target.value);
+                setPage(0);
+              }}
+            />
+          </label>
+        </div>
         <div className="filter-row">
           <SlidersHorizontal size={15} />
           <select
@@ -158,7 +189,12 @@ export default function AbsentTable({
               <option key={s}>{s}</option>
             ))}
           </select>
-          {(search || line || shift || activeQuickFilter !== "all") && (
+          {(search ||
+            fromId ||
+            toId ||
+            line ||
+            shift ||
+            activeQuickFilter !== "all") && (
             <button className="text-button" onClick={reset}>
               Reset filters
               <X size={13} />

@@ -865,6 +865,54 @@ small {
   flex-wrap: wrap;
 }
 
+.id-range-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.id-range-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid rgba(15, 23, 42, 0.1);
+  background: rgba(255, 255, 255, 0.85);
+  border-radius: 12px;
+  padding: 0 12px;
+  min-width: 0;
+  transition: box-shadow 0.2s var(--spring), border-color 0.2s var(--spring);
+}
+
+.id-range-field:focus-within {
+  border-color: rgba(0, 113, 227, 0.55);
+  box-shadow: 0 0 0 3.5px rgba(0, 113, 227, 0.16);
+}
+
+.id-range-field span {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.id-range-field input {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  padding: 9px 0;
+  font-size: 12px;
+  box-shadow: none;
+}
+
+.id-range-field input:focus {
+  box-shadow: none;
+}
+
+.id-range-field input:focus-visible {
+  outline: 0;
+}
+
 .filter-row select {
   font-size: 12px;
   padding: 7px 10px;

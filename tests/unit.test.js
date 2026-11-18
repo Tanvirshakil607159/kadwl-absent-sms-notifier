@@ -10,6 +10,7 @@ import {
   parseAttendanceFile,
   parseEmergencyText,
   parseEmergencyFile,
+  matchesIdRange,
 } from "../src/utils/smsUtils.js";
 import { normalizeAttendanceDate } from "../src/utils/dates.js";
 import {
@@ -462,4 +463,18 @@ test("Emergency directory parser supports Employee_Type, quoted designations, XL
     normalizePhoneNumber(fileRecords[0].mobileNo).normalized,
     "01741144499",
   );
+});
+test("ID range filter supports prefixed ranges, numeric bounds, single-ended bounds, and reversed bounds", () => {
+  assert.equal(matchesIdRange("KADS30", "KADS5", "KADS50"), true);
+  assert.equal(matchesIdRange("KADS5", "KADS5", "KADS50"), true);
+  assert.equal(matchesIdRange("KADS107", "KADS5", "KADS50"), false);
+  assert.equal(matchesIdRange("KADW23", "KADS5", "KADS50"), false);
+  assert.equal(matchesIdRange("KADW23", "10", "45"), true);
+  assert.equal(matchesIdRange("KADS40", "10", "45"), true);
+  assert.equal(matchesIdRange("KADS5", "10", "45"), false);
+  assert.equal(matchesIdRange("KADS30", "KADS50", "KADS5"), true);
+  assert.equal(matchesIdRange("KADS107", "KADS100", ""), true);
+  assert.equal(matchesIdRange("KADS5", "", "KADS40"), true);
+  assert.equal(matchesIdRange("KADS107", "", "KADS40"), false);
+  assert.equal(matchesIdRange("E002", "E001", "E002"), true);
 });

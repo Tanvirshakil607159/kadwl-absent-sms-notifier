@@ -26,6 +26,7 @@ import {
   EMERGENCY_TEMPLATES,
   calculateSMSStats,
   exportEmergencyExcelTemplate,
+  matchesIdRange,
   normalizePhoneNumber,
   parseEmergencyFile,
   parseEmergencyText,
@@ -56,6 +57,8 @@ export default function EmergencyMessagePanel({
 }) {
   const [selectedIds, setSelectedIds] = useState(() => new Set());
   const [search, setSearch] = useState("");
+  const [fromId, setFromId] = useState("");
+  const [toId, setToId] = useState("");
   const [employeeTypeFilter, setEmployeeTypeFilter] = useState("");
   const [designationFilter, setDesignationFilter] = useState("");
   const [phoneFilter, setPhoneFilter] = useState("all");
@@ -130,6 +133,9 @@ export default function EmergencyMessagePanel({
       if (designationFilter && r.designation !== designationFilter) {
         return false;
       }
+      if (!matchesIdRange(r.employeeId, fromId, toId)) {
+        return false;
+      }
       if (
         phoneFilter === "invalid" &&
         normalizePhoneNumber(r.mobileNo).isValid
@@ -144,7 +150,15 @@ export default function EmergencyMessagePanel({
       }
       return true;
     });
-  }, [records, search, employeeTypeFilter, designationFilter, phoneFilter]);
+  }, [
+    records,
+    search,
+    fromId,
+    toId,
+    employeeTypeFilter,
+    designationFilter,
+    phoneFilter,
+  ]);
 
   const pages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const currentPage = Math.min(page, pages - 1);
@@ -209,6 +223,8 @@ export default function EmergencyMessagePanel({
 
   function resetFilters() {
     setSearch("");
+    setFromId("");
+    setToId("");
     setEmployeeTypeFilter("");
     setDesignationFilter("");
     setPhoneFilter("all");
@@ -543,6 +559,32 @@ export default function EmergencyMessagePanel({
                 }}
               />
             </label>
+            <div className="id-range-row">
+              <label className="id-range-field">
+                <span>From ID</span>
+                <input
+                  aria-label="Filter from ID"
+                  placeholder="e.g. KADW1000"
+                  value={fromId}
+                  onChange={(e) => {
+                    setFromId(e.target.value);
+                    setPage(0);
+                  }}
+                />
+              </label>
+              <label className="id-range-field">
+                <span>To ID</span>
+                <input
+                  aria-label="Filter to ID"
+                  placeholder="e.g. KADW2000"
+                  value={toId}
+                  onChange={(e) => {
+                    setToId(e.target.value);
+                    setPage(0);
+                  }}
+                />
+              </label>
+            </div>
             <div className="filter-row">
               <SlidersHorizontal size={15} />
               <select
@@ -576,6 +618,8 @@ export default function EmergencyMessagePanel({
                 ))}
               </select>
               {(search ||
+                fromId ||
+                toId ||
                 employeeTypeFilter ||
                 designationFilter ||
                 phoneFilter !== "all") && (

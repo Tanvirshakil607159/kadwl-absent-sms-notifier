@@ -85,6 +85,60 @@ export function calculateSMSStats(text = "", ratePerPart = 0.35) {
   };
 }
 
+function splitEmployeeId(value) {
+  const raw = String(value ?? "").trim();
+  if (!raw) return null;
+  const match = raw.match(/^([A-Za-z_-]*?)(\d+)$/);
+  if (!match) return { raw, prefix: null, num: null };
+  return {
+    raw,
+    prefix: match[1].toLowerCase(),
+    num: Number(match[2]),
+  };
+}
+
+export function matchesIdRange(employeeId, fromId = "", toId = "") {
+  const fromRaw = String(fromId ?? "").trim();
+  const toRaw = String(toId ?? "").trim();
+  if (!fromRaw && !toRaw) return true;
+
+  const target = splitEmployeeId(employeeId);
+  if (!target) return false;
+
+  const from = splitEmployeeId(fromRaw);
+  const to = splitEmployeeId(toRaw);
+
+  const canUseNumeric =
+    target.num !== null &&
+    (!from || from.num !== null) &&
+    (!to || to.num !== null);
+
+  if (canUseNumeric) {
+    const prefixes = [from?.prefix, to?.prefix].filter((p) => p);
+    const sameExplicitPrefix =
+      prefixes.length <= 1 || new Set(prefixes).size === 1;
+
+    if (sameExplicitPrefix) {
+      const requiredPrefix = prefixes[0] || "";
+      if (requiredPrefix && target.prefix !== requiredPrefix) {
+        return false;
+      }
+      const min = from && to ? Math.min(from.num, to.num) : from?.num ?? -Infinity;
+      const max = from && to ? Math.max(from.num, to.num) : to?.num ?? Infinity;
+      return target.num >= min && target.num <= max;
+    }
+  }
+
+  const cmp = (a, b) =>
+    a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
+  if (from && to && cmp(from.raw, to.raw) > 0) {
+    return cmp(target.raw, to.raw) >= 0 && cmp(target.raw, from.raw) <= 0;
+  }
+  if (from && cmp(target.raw, from.raw) < 0) return false;
+  if (to && cmp(target.raw, to.raw) > 0) return false;
+  return true;
+}
+
 // Replace template variables
 export function renderTemplate(template, record, absentDate = "") {
   if (!template) return "";

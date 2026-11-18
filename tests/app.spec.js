@@ -465,6 +465,15 @@ test("Emergency Message uploads directory, filters Staff/Worker/Office & Designa
       buffer: Buffer.from(csv),
     });
   await expect(page.locator("#emergency-list-title .count")).toHaveText("4");
+  const emergencyPanel = page.locator("#panel-emergency");
+  await emergencyPanel.getByLabel("Filter from ID").fill("KADS10");
+  await emergencyPanel.getByLabel("Filter to ID").fill("KADS100");
+  await expect(page.locator("#emergency-list-title .count")).toHaveText("1");
+  await expect(
+    page.getByText("Md. Arif Hossain", { exact: true }),
+  ).toBeVisible();
+  await emergencyPanel.getByRole("button", { name: "Reset filters" }).click();
+  await expect(page.locator("#emergency-list-title .count")).toHaveText("4");
   await page.getByRole("button", { name: /^Staff\s+2$/ }).click();
   await expect(page.locator("#emergency-list-title .count")).toHaveText("2");
   await expect(page.getByText("Sahidul", { exact: true })).toBeVisible();

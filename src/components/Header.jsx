@@ -4,6 +4,7 @@ import {
   Upload,
   Users,
   MessageSquare,
+  Megaphone,
   History,
   Settings,
 } from "lucide-react";
@@ -37,6 +38,13 @@ const tabs = [
     "Choose a template, preview your message, and review before sending.",
   ],
   [
+    "emergency",
+    "Emergency Message",
+    Megaphone,
+    "Emergency & Chuti Broadcast",
+    "Upload an employee directory, filter by Staff, Worker, Office, or Designation, and send urgent notices.",
+  ],
+  [
     "history",
     "History",
     History,
@@ -58,6 +66,7 @@ export default function Header({
   onTabChange,
   recordsCount,
   selectedCount,
+  emergencyCount,
   historyCount,
   simulation,
 }) {
@@ -110,9 +119,11 @@ export default function Header({
               ? recordsCount
               : id === "messages"
                 ? selectedCount
-                : id === "history"
-                  ? historyCount
-                  : 0;
+                : id === "emergency"
+                  ? emergencyCount
+                  : id === "history"
+                    ? historyCount
+                    : 0;
           return (
             <button
               key={id}

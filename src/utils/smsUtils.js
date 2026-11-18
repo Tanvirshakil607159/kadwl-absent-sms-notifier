@@ -99,6 +99,7 @@ export function renderTemplate(template, record, absentDate = "") {
     "{LastPresentDate}": record.lastPresentDate || "",
     "{Date}": absentDate || "",
     "{Designation}": record.designation || "",
+    "{EmployeeType}": record.employeeType || "",
     "{Company}": "K.A. Design Wear Ltd.",
   };
 
@@ -139,6 +140,39 @@ export const DEFAULT_TEMPLATES = [
   },
 ];
 
+export const EMERGENCY_TEMPLATES = [
+  {
+    id: "emergency_chuti_bn",
+    name: "Bangla - জরুরি ছুটি ঘোষণা (Emergency Chuti)",
+    category: "Bangla",
+    text: "জরুরি নোটিশ: সম্মানিত {Name} ({ID}), অনিবার্য কারণবশত {Date} তারিখে কারখানার সকল কার্যক্রম বন্ধ (জরুরি ছুটি) থাকবে। পরবর্তী নির্দেশনা না দেওয়া পর্যন্ত অনুগ্রহ করে অপেক্ষা করুন। - K.A. Design Wear Ltd.",
+  },
+  {
+    id: "emergency_reopen_bn",
+    name: "Bangla - কারখানা চালু / উপস্থিতি নোটিশ",
+    category: "Bangla",
+    text: "জরুরি নোটিশ: সম্মানিত {Name} ({ID}), {Date} তারিখ থেকে কারখানা যথাসময়ে চালু থাকবে। অনুগ্রহ করে নির্ধারিত সময়ে কর্মস্থলে উপস্থিত থাকুন। - K.A. Design Wear Ltd.",
+  },
+  {
+    id: "emergency_duty_bn",
+    name: "Bangla - জরুরি ডিউটি / শিফট পরিবর্তন",
+    category: "Bangla",
+    text: "জরুরি নোটিশ: {Name} ({ID}, {Designation}), {Date} তারিখে আপনার ডিউটি সময়সূচি পরিবর্তন করা হয়েছে। বিস্তারিত জানতে সুপারভাইজার বা HR বিভাগে যোগাযোগ করুন। - K.A. Design Wear Ltd.",
+  },
+  {
+    id: "emergency_chuti_en",
+    name: "English - Emergency Holiday / Closure",
+    category: "English",
+    text: "URGENT NOTICE: Dear {Name} ({ID}), due to unavoidable circumstances, K.A. Design Wear Ltd. will remain closed on {Date} (Emergency Holiday). Further updates will follow.",
+  },
+  {
+    id: "emergency_staff_en",
+    name: "English - Urgent Team Notice",
+    category: "English",
+    text: "URGENT NOTICE: Dear {Name} ({ID}, {Designation}), please contact HR/Admin immediately regarding {Date}. - K.A. Design Wear Ltd.",
+  },
+];
+
 const cleanHeader = (header) =>
   String(header ?? "")
     .toLowerCase()
@@ -147,6 +181,7 @@ const aliases = {
   employeeId: ["employeeid", "empid", "id", "cardno", "card"],
   name: ["name", "employeename", "workername"],
   designation: ["designation", "desig", "post", "role"],
+  employeeType: ["employeetype", "emptype", "type", "category", "stafftype"],
   line: ["line", "lineno", "section"],
   shift: ["shift", "shifttype"],
   lastPresentDate: [
@@ -174,58 +209,45 @@ const aliases = {
     "cell",
   ],
 };
-export function parseAttendanceRows(rows, allowHeaderless = false) {
-  let headerIndex = rows.findIndex((row) => {
+
+function resolveHeaderMap(rows, allowHeaderless, headerlessMapFn) {
+  const headerIndex = rows.findIndex((row) => {
     const keys = row.map(cleanHeader);
     return (
       aliases.employeeId.some((key) => keys.includes(key)) &&
       aliases.name.some((key) => keys.includes(key))
     );
   });
-  let map = {};
-  if (headerIndex < 0) {
-    if (!allowHeaderless)
-      throw new Error(
-        "Employee ID and Name columns are required. Download the template for an example.",
-      );
-    const firstRow = rows.find((row) =>
-      row.some((cell) => String(cell ?? "").trim()),
-    );
-    const trimmed = firstRow ? [...firstRow] : [];
-    while (trimmed.length && !String(trimmed[trimmed.length - 1] ?? "").trim()) {
-      trimmed.pop();
-    }
-    const count = trimmed.length;
-    const fields =
-      count === 9
-        ? [
-            "sl",
-            "employeeId",
-            "name",
-            "designation",
-            "line",
-            "shift",
-            "lastPresentDate",
-            "absentDays",
-            "mobileNo",
-          ]
-        : count === 3
-          ? ["employeeId", "name", "mobileNo"]
-          : null;
-    if (!fields)
-      throw new Error(
-        "Include column headers, or paste 3 columns (ID, Name, Mobile) or the 9 template columns.",
-      );
-    map = Object.fromEntries(fields.map((field, index) => [field, index]));
-  } else {
+  if (headerIndex >= 0) {
     const headers = rows[headerIndex].map(cleanHeader);
-    map = Object.fromEntries(
+    const map = Object.fromEntries(
       Object.entries(aliases).map(([field, keys]) => [
         field,
         headers.findIndex((header) => keys.includes(header)),
       ]),
     );
+    return { headerIndex, map };
   }
+  if (!allowHeaderless) {
+    throw new Error(
+      "Employee ID and Name columns are required. Download the template for an example.",
+    );
+  }
+  const firstRow = rows.find((row) =>
+    row.some((cell) => String(cell ?? "").trim()),
+  );
+  const trimmed = firstRow ? [...firstRow] : [];
+  while (trimmed.length && !String(trimmed[trimmed.length - 1] ?? "").trim()) {
+    trimmed.pop();
+  }
+  const fields = headerlessMapFn(trimmed.length);
+  return {
+    headerIndex: -1,
+    map: Object.fromEntries(fields.map((field, index) => [field, index])),
+  };
+}
+
+function iterateEmployeeRows(rows, headerIndex, map, transformRow) {
   const ids = new Set();
   const records = [];
   for (const [offset, row] of rows.slice(headerIndex + 1).entries()) {
@@ -252,41 +274,76 @@ export function parseAttendanceRows(rows, allowHeaderless = false) {
           ". Remove duplicate rows before importing.",
       );
     ids.add(employeeId.toLowerCase());
-    const rawDays = get("absentDays");
-    const days = rawDays === "" ? 1 : Number(rawDays);
-    if (!Number.isInteger(days) || days < 1)
-      throw new Error(
-        "Invalid absent days for " +
-          employeeId +
-          ". Use a positive whole number.",
-      );
-    let lastPresentDate = get("lastPresentDate");
-    if (/^\d{5}$/.test(lastPresentDate))
-      lastPresentDate = new Date(
-        Date.UTC(1899, 11, 30) + Number(lastPresentDate) * 86400000,
-      ).toLocaleDateString("en-GB", {
-        timeZone: "UTC",
-        day: "2-digit",
-        month: "short",
-        year: "numeric",
-      });
-    records.push({
-      sl: records.length + 1,
-      employeeId,
-      name,
-      designation: get("designation"),
-      line: get("line"),
-      shift: get("shift"),
-      lastPresentDate,
-      absentDays: days,
-      mobileNo: get("mobileNo"),
-      status: "Pending",
-    });
+    records.push(transformRow({ sl: records.length + 1, employeeId, name, get }));
   }
   if (!records.length)
     throw new Error(
       "No employee rows found. Add records below the column headers.",
     );
+  return records;
+}
+
+export function parseAttendanceRows(rows, allowHeaderless = false) {
+  const { headerIndex, map } = resolveHeaderMap(rows, allowHeaderless, (count) => {
+    const fields =
+      count === 9
+        ? [
+            "sl",
+            "employeeId",
+            "name",
+            "designation",
+            "line",
+            "shift",
+            "lastPresentDate",
+            "absentDays",
+            "mobileNo",
+          ]
+        : count === 3
+          ? ["employeeId", "name", "mobileNo"]
+          : null;
+    if (!fields)
+      throw new Error(
+        "Include column headers, or paste 3 columns (ID, Name, Mobile) or the 9 template columns.",
+      );
+    return fields;
+  });
+  const records = iterateEmployeeRows(
+    rows,
+    headerIndex,
+    map,
+    ({ sl, employeeId, name, get }) => {
+      const rawDays = get("absentDays");
+      const days = rawDays === "" ? 1 : Number(rawDays);
+      if (!Number.isInteger(days) || days < 1)
+        throw new Error(
+          "Invalid absent days for " +
+            employeeId +
+            ". Use a positive whole number.",
+        );
+      let lastPresentDate = get("lastPresentDate");
+      if (/^\d{5}$/.test(lastPresentDate))
+        lastPresentDate = new Date(
+          Date.UTC(1899, 11, 30) + Number(lastPresentDate) * 86400000,
+        ).toLocaleDateString("en-GB", {
+          timeZone: "UTC",
+          day: "2-digit",
+          month: "short",
+          year: "numeric",
+        });
+      return {
+        sl,
+        employeeId,
+        name,
+        designation: get("designation"),
+        line: get("line"),
+        shift: get("shift"),
+        lastPresentDate,
+        absentDays: days,
+        mobileNo: get("mobileNo"),
+        status: "Pending",
+      };
+    },
+  );
   const dateMatch = rows
     .slice(0, Math.max(0, headerIndex))
     .flat()
@@ -301,27 +358,74 @@ export function parseAttendanceRows(rows, allowHeaderless = false) {
   }
   return { records, detectedAbsentDate: dateMatch?.[1] || "" };
 }
-export async function parseAttendanceText(text) {
+
+export function parseEmergencyRows(rows, allowHeaderless = false) {
+  const { headerIndex, map } = resolveHeaderMap(rows, allowHeaderless, (count) => {
+    const fields =
+      count === 6
+        ? [
+            "sl",
+            "employeeId",
+            "name",
+            "designation",
+            "employeeType",
+            "mobileNo",
+          ]
+        : count === 3
+          ? ["employeeId", "name", "mobileNo"]
+          : null;
+    if (!fields)
+      throw new Error(
+        "Include column headers, or paste 3 columns (ID, Name, Mobile) or the 6 emergency list columns.",
+      );
+    return fields;
+  });
+  return iterateEmployeeRows(
+    rows,
+    headerIndex,
+    map,
+    ({ sl, employeeId, name, get }) => ({
+      sl,
+      employeeId,
+      name,
+      designation: get("designation"),
+      employeeType: get("employeeType"),
+      mobileNo: get("mobileNo"),
+    }),
+  );
+}
+
+async function readSpreadsheetRows(source, isText = false) {
   const XLSX = await loadSpreadsheet();
-  const workbook = XLSX.read(text, { type: "string", raw: true });
+  const workbook = isText
+    ? XLSX.read(source, { type: "string", raw: true })
+    : XLSX.read(await source.arrayBuffer(), { type: "array" });
   const sheetName = workbook.SheetNames[0];
   const worksheet = sheetName ? workbook.Sheets[sheetName] : null;
-  if (!worksheet) throw new Error("No attendance rows found.");
-  const rows = XLSX.utils.sheet_to_json(worksheet, {
+  if (!worksheet)
+    throw new Error(
+      isText
+        ? "No employee rows found."
+        : "File contains no readable worksheets.",
+    );
+  return XLSX.utils.sheet_to_json(worksheet, {
     header: 1,
     defval: "",
     raw: true,
   });
-  return parseAttendanceRows(rows, true);
+}
+
+export async function parseAttendanceText(text) {
+  return parseAttendanceRows(await readSpreadsheetRows(text, true), true);
 }
 export async function parseAttendanceFile(file) {
-  const XLSX = await loadSpreadsheet();
-  const workbook = XLSX.read(await file.arrayBuffer(), { type: "array" });
-  const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-  if (!worksheet) throw new Error("File contains no readable worksheets.");
-  return parseAttendanceRows(
-    XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: "", raw: true }),
-  );
+  return parseAttendanceRows(await readSpreadsheetRows(file, false));
+}
+export async function parseEmergencyText(text) {
+  return parseEmergencyRows(await readSpreadsheetRows(text, true), true);
+}
+export async function parseEmergencyFile(file) {
+  return parseEmergencyRows(await readSpreadsheetRows(file, false));
 }
 
 // Export sample Excel template
@@ -368,6 +472,40 @@ export async function exportSampleExcelTemplate() {
   XLSX.utils.book_append_sheet(workbook, worksheet, "Daily Absent List");
 
   XLSX.writeFile(workbook, "KADW_Daily_Absent_List_Template.xlsx");
+}
+
+export async function exportEmergencyExcelTemplate() {
+  const XLSX = await loadSpreadsheet();
+  const sampleData = [
+    {
+      SL: 1,
+      "Employee ID": "KADS5",
+      "Employee Name": "Sahidul",
+      Designation: "Deputy Production Manager",
+      Employee_Type: "Staff",
+      "Mobile No": "01741144499",
+    },
+    {
+      SL: 2,
+      "Employee ID": "KADW23",
+      "Employee Name": "Maksuda",
+      Designation: "Junior Sewing Operator",
+      Employee_Type: "Worker",
+      "Mobile No": "01708049441",
+    },
+    {
+      SL: 3,
+      "Employee ID": "KADS40",
+      "Employee Name": "Md. Arif Hossain",
+      Designation: "Senior Merchandiser",
+      Employee_Type: "Office",
+      "Mobile No": "01939196876",
+    },
+  ];
+  const worksheet = XLSX.utils.json_to_sheet(sampleData);
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, "Emergency Employee List");
+  XLSX.writeFile(workbook, "KADW_Emergency_Message_Template.xlsx");
 }
 
 // Export SMS delivery log report

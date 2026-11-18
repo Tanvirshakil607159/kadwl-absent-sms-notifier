@@ -8,6 +8,7 @@ import {
   ClipboardPaste,
   Users,
   MessageSquare,
+  Megaphone,
   ArrowRight,
   Download,
 } from "lucide-react";
@@ -15,6 +16,7 @@ import Header from "./components/Header";
 import KPICards from "./components/KPICards";
 import AbsentTable from "./components/AbsentTable";
 import SMSComposer from "./components/SMSComposer";
+import EmergencyMessagePanel from "./components/EmergencyMessagePanel";
 import UploadModal from "./components/UploadModal";
 import PasteModal from "./components/PasteModal";
 import GatewaySettingsModal from "./components/GatewaySettingsModal";
@@ -80,11 +82,31 @@ function initialRecords() {
       return true;
     });
 }
+function initialEmergencyRecords() {
+  const stored = readStored("kadw_emergency_records", [], Array.isArray);
+  const ids = new Set();
+  return stored
+    .filter((r) => r && r.employeeId != null && r.name != null)
+    .map((r, i) => ({
+      sl: i + 1,
+      employeeId: String(r.employeeId ?? ""),
+      name: String(r.name ?? ""),
+      designation: String(r.designation ?? ""),
+      employeeType: String(r.employeeType ?? ""),
+      mobileNo: String(r.mobileNo ?? ""),
+    }))
+    .filter((r) => {
+      if (!r.employeeId || ids.has(r.employeeId.toLowerCase())) return false;
+      ids.add(r.employeeId.toLowerCase());
+      return true;
+    });
+}
 const sectionIds = [
   "overview",
   "import",
   "attendance",
   "messages",
+  "emergency",
   "history",
   "settings",
 ];
@@ -112,6 +134,9 @@ export default function App() {
   }, []);
   const [absentDate, setAbsentDate] = useState(initialDate);
   const [records, setRecords] = useState(initialRecords);
+  const [emergencyRecords, setEmergencyRecords] = useState(
+    initialEmergencyRecords,
+  );
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [activeQuickFilter, setActiveQuickFilter] = useState("all");
   const [gatewayConfig, setGatewayConfig] = useState(() => {
@@ -157,12 +182,13 @@ export default function App() {
     const results = [
       writeStored("kadw_absent_date", absentDate),
       writeStored("kadw_absent_records", records),
+      writeStored("kadw_emergency_records", emergencyRecords),
       writeStored("kadw_gateway_config", publicConfig),
       writeStored("kadw_sms_history", historyLogs),
     ];
     // Storage is an external system; surface failures after synchronization.
     queueMicrotask(() => setStorageFailed(results.some((ok) => !ok)));
-  }, [absentDate, records, gatewayConfig, historyLogs]);
+  }, [absentDate, records, emergencyRecords, gatewayConfig, historyLogs]);
   useEffect(() => {
     if (!busy) return;
     const guard = (e) => {
@@ -183,7 +209,7 @@ export default function App() {
       `Imported ${rows.length} employees. Select recipients to prepare a message.`,
     );
   }
-  function prepare(message, targets) {
+  function prepare(message, targets, dateLabel = formattedDate) {
     if (running.current || !message.trim()) return;
     const valid = targets.filter(
       (r) => normalizePhoneNumber(r.mobileNo).isValid,
@@ -200,7 +226,7 @@ export default function App() {
     }
     const messages = valid.map((record) => ({
       record,
-      message: renderTemplate(message, record, formattedDate),
+      message: renderTemplate(message, record, dateLabel),
     }));
     setReview({
       messages,
@@ -248,7 +274,7 @@ export default function App() {
           timestamp: new Date().toLocaleString(),
           employeeId: record.employeeId,
           name: record.name,
-          line: record.line,
+          line: record.line || record.employeeType || "",
           mobile: phoneInfo.normalized,
           status: result.status,
           parts: stats.parts,
@@ -292,6 +318,7 @@ export default function App() {
           onTabChange={navigate}
           recordsCount={records.length}
           selectedCount={selected.length}
+          emergencyCount={emergencyRecords.length}
           historyCount={historyLogs.length}
           simulation={simulation}
         />
@@ -380,6 +407,22 @@ export default function App() {
                 </p>
                 <button className="btn" onClick={() => navigate("messages")}>
                   Open messages
+                  <ArrowRight size={15} />
+                </button>
+              </article>
+              <article className="panel overview-action">
+                <span className="icon-tile rose">
+                  <Megaphone size={24} />
+                </span>
+                <span className="eyebrow">BROADCAST · EMERGENCY</span>
+                <h2>Emergency Message</h2>
+                <p>
+                  {emergencyRecords.length
+                    ? `${emergencyRecords.length} employees ready for urgent notices such as emergency chuti.`
+                    : "Upload your employee directory to filter Staff, Workers, or Office for emergency notices."}
+                </p>
+                <button className="btn" onClick={() => navigate("emergency")}>
+                  Open Emergency Message
                   <ArrowRight size={15} />
                 </button>
               </article>
@@ -533,6 +576,39 @@ export default function App() {
             />
           </section>
           <section
+            id="panel-emergency"
+            role="tabpanel"
+            aria-labelledby="tab-emergency"
+            hidden={activeTab !== "emergency"}
+            tabIndex={0}
+          >
+            <EmergencyMessagePanel
+              records={emergencyRecords}
+              onImportRecords={(rows) => {
+                setEmergencyRecords(rows);
+                notify(
+                  `Loaded ${rows.length} employees into Emergency Message.`,
+                );
+              }}
+              onClearRecords={() => setModal("clear-emergency")}
+              onUpdatePhone={(id, mobileNo) => {
+                setEmergencyRecords((prev) =>
+                  prev.map((r) =>
+                    r.employeeId === id ? { ...r, mobileNo } : r,
+                  ),
+                );
+                notify("Emergency mobile number updated.");
+              }}
+              onTriggerSend={(message, targets, dateLabel) =>
+                prepare(message, targets, dateLabel)
+              }
+              gatewayRate={Number(gatewayConfig.ratePerSMS) || 0}
+              senderId={gatewayConfig.senderId}
+              simulation={simulation}
+              busy={busy}
+            />
+          </section>
+          <section
             id="panel-history"
             role="tabpanel"
             aria-labelledby="tab-history"
@@ -595,6 +671,30 @@ export default function App() {
                 }}
               >
                 Clear employees
+              </button>
+            </>
+          }
+        />
+      )}
+      {modal === "clear-emergency" && (
+        <Dialog
+          title="Clear the emergency directory?"
+          description={`Remove ${emergencyRecords.length} employees from Emergency Message in this browser. Your message history will be kept.`}
+          onClose={() => setModal(null)}
+          footer={
+            <>
+              <button className="btn" onClick={() => setModal(null)}>
+                Keep directory
+              </button>
+              <button
+                className="btn btn-danger"
+                onClick={() => {
+                  setEmergencyRecords([]);
+                  setModal(null);
+                  notify("Emergency directory cleared.");
+                }}
+              >
+                Clear directory
               </button>
             </>
           }

@@ -8,6 +8,8 @@ import {
   parseAttendanceRows,
   parseAttendanceText,
   parseAttendanceFile,
+  parseEmergencyText,
+  parseEmergencyFile,
 } from "../src/utils/smsUtils.js";
 import { normalizeAttendanceDate } from "../src/utils/dates.js";
 import {
@@ -372,4 +374,48 @@ test("Malformed and unavailable browser storage recover safely", () => {
   global.localStorage.getItem = () => "null";
   assert.deepEqual(readStored("records", [], Array.isArray), []);
   delete global.localStorage;
+});
+test("Emergency directory parser supports Employee_Type, quoted designations, XLSX files and {EmployeeType} templates", async () => {
+  const csv = [
+    "SL,Employee ID,Employee Name,Designation,Employee_Type,Mobile No",
+    '1,KADS188,Aysha Siddiqua,"Manager HR,Admin & Compliance",Staff,01703211565',
+    "2,KADW23,Maksuda,Junior Sewing Operator,Worker,01708049441",
+    "3,KADS40,Md. Arif Hossain,Senior Merchandiser,Office,01939196876",
+  ].join("\n");
+  const parsed = await parseEmergencyText(csv);
+  assert.equal(parsed.length, 3);
+  assert.equal(parsed[0].designation, "Manager HR,Admin & Compliance");
+  assert.equal(parsed[0].employeeType, "Staff");
+  assert.equal(parsed[1].employeeType, "Worker");
+  assert.equal(parsed[2].employeeType, "Office");
+  assert.equal(
+    renderTemplate("{Name} ({EmployeeType})", parsed[0], "18 Nov 2026"),
+    "Aysha Siddiqua (Staff)",
+  );
+
+  const XLSX = await import("xlsx");
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(
+    workbook,
+    XLSX.utils.aoa_to_sheet([
+      [
+        "SL",
+        "Employee ID",
+        "Employee Name",
+        "Designation",
+        "Employee_Type",
+        "Mobile No",
+      ],
+      [1, "KADS5", "Sahidul", "Deputy Production Manager", "Staff", 1741144499],
+    ]),
+    "Employees",
+  );
+  const data = XLSX.write(workbook, { type: "array", bookType: "xlsx" });
+  const fileRecords = await parseEmergencyFile(new Blob([data]));
+  assert.equal(fileRecords[0].employeeId, "KADS5");
+  assert.equal(fileRecords[0].employeeType, "Staff");
+  assert.equal(
+    normalizePhoneNumber(fileRecords[0].mobileNo).normalized,
+    "01741144499",
+  );
 });

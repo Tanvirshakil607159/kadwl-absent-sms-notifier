@@ -707,8 +707,69 @@ small {
 /* Overview Cards */
 .overview-actions {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.85fr) minmax(330px, 1fr);
   gap: 20px;
+  align-items: start;
+}
+
+.emergency-workspace {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.emergency-workspace .tab-action-bar {
+  margin-bottom: 0;
+}
+
+.emergency-type-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.filter-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.85);
+  background: var(--glass-bg);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 600;
+  box-shadow: var(--glass-highlight), 0 2px 8px rgba(15, 23, 42, 0.04);
+  transition:
+    background 0.2s var(--spring),
+    border-color 0.2s var(--spring),
+    color 0.2s var(--spring),
+    transform 0.2s var(--spring);
+}
+
+.filter-pill:hover {
+  background: var(--glass-bg-strong);
+  transform: translateY(-1px);
+}
+
+.filter-pill.active {
+  background: linear-gradient(180deg, #1b82f2 0%, #0071e3 100%);
+  color: #fff;
+  border-color: rgba(0, 94, 196, 0.5);
+  box-shadow: 0 4px 14px rgba(0, 113, 227, 0.25);
+}
+
+.filter-pill.active .count {
+  background: rgba(255, 255, 255, 0.24);
+  color: #fff;
 }
 
 .overview-action {
@@ -1838,11 +1899,21 @@ button:focus-visible .lucide {
   .kpi-card {
     padding: 14px;
   }
+  .overview-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .dashboard-grid {
+    grid-template-columns: minmax(0, 1.4fr) minmax(305px, 1fr);
+    gap: 16px;
+  }
 }
 
 @media (max-width: 850px) {
   .kpi-grid {
     grid-template-columns: repeat(3, 1fr);
+  }
+  .dashboard-grid {
+    grid-template-columns: 1fr;
   }
   .section-tabs [role="tab"] {
     padding: 10px 12px;
@@ -1888,17 +1959,21 @@ button:focus-visible .lucide {
   }
   .section-tabs {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 6px;
     padding: 6px;
     border-radius: 16px;
     overflow: visible;
   }
   .section-tabs [role="tab"] {
-    padding: 10px 6px;
+    padding: 10px 8px;
     font-size: 11px;
     gap: 5px;
     border-radius: 11px;
+    white-space: normal;
+  }
+  .section-tabs [role="tab"]:last-child {
+    grid-column: 1 / -1;
   }
   .section-tabs [role="tab"] .lucide {
     width: 14px;

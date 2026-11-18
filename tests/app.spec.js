@@ -419,3 +419,59 @@ test("List pagination, sorting, clear confirmation and sample template download"
     page.getByRole("heading", { name: "Your team’s day starts here" }),
   ).toBeVisible();
 });
+test("Emergency Message uploads directory, filters Staff/Worker/Office & Designation, prepares emergency chuti, and sends", async ({
+  page,
+}) => {
+  await page.addInitScript(() =>
+    localStorage.setItem(
+      "kadw_gateway_config",
+      JSON.stringify({ provider: "simulation", delayBetweenSMS: 0 }),
+    ),
+  );
+  await page.goto("/");
+  await page.getByRole("tab", { name: /Emergency Message/ }).click();
+  const csv = [
+    "SL,Employee ID,Employee Name,Designation,Employee_Type,Mobile No",
+    "1,KADS5,Sahidul,Deputy Production Manager,Staff,01741144499",
+    "2,KADW23,Maksuda,Junior Sewing Operator,Worker,01708049441",
+    "3,KADS40,Md. Arif Hossain,Senior Merchandiser,Office,01939196876",
+    '4,KADS188,Aysha Siddiqua,"Manager HR,Admin & Compliance",Staff,01703211565',
+  ].join("\n");
+  await page
+    .getByLabel("Emergency employee list file")
+    .setInputFiles({
+      name: "employees.csv",
+      mimeType: "text/csv",
+      buffer: Buffer.from(csv),
+    });
+  await expect(page.locator("#emergency-list-title .count")).toHaveText("4");
+  await page.getByRole("button", { name: /^Staff\s+2$/ }).click();
+  await expect(page.locator("#emergency-list-title .count")).toHaveText("2");
+  await expect(page.getByText("Sahidul", { exact: true })).toBeVisible();
+  await expect(page.getByText("Maksuda", { exact: true })).toHaveCount(0);
+  await page
+    .getByLabel("Filter by designation")
+    .selectOption("Manager HR,Admin & Compliance");
+  await expect(page.locator("#emergency-list-title .count")).toHaveText("1");
+  await page.getByLabel("Select filtered (1)").check();
+  await page.getByLabel("Emergency notice date").fill("2026-11-19");
+  await page
+    .getByRole("button", { name: "Review emergency simulation" })
+    .click();
+  await expect(page.getByRole("dialog")).toContainText("Aysha Siddiqua");
+  await expect(page.getByRole("dialog")).toContainText("19 Nov 2026");
+  await expect(page.getByRole("dialog")).toContainText("জরুরি ছুটি");
+  await page.getByRole("button", { name: "Start simulation" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Dispatch complete" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Done", exact: true }).click();
+  await page.getByRole("button", { name: "Clear directory" }).click();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Clear directory", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Upload emergency employee directory" }),
+  ).toBeVisible();
+});

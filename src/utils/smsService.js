@@ -179,6 +179,56 @@ export async function checkBulkSMSBDBalance(apiKey) {
   }
 }
 
+export async function checkGatewayBalanceForBatch(
+  config,
+  estimatedCost,
+  messageCount = 0,
+) {
+  if (!config || config.provider !== "bulksmsbd") {
+    return { supported: false, sufficient: true };
+  }
+  const res = await checkBulkSMSBDBalance(config.apiKey);
+  if (!res.success) {
+    return {
+      supported: true,
+      sufficient: false,
+      balance: 0,
+      requiredCost: Number(estimatedCost) || 0,
+      response: res.response,
+    };
+  }
+  const balanceCents = Math.round((Number(res.balance) || 0) * 100);
+  const costCents = Math.round(Math.max(0, Number(estimatedCost) || 0) * 100);
+  const balance = balanceCents / 100;
+  const requiredCost = costCents / 100;
+  const hasCredit = costCents > 0 ? balanceCents >= costCents : balanceCents > 0 || messageCount === 0;
+  const remaining = Math.max(0, (balanceCents - costCents) / 100);
+  const shortfall = Math.max(0, (costCents - balanceCents) / 100);
+
+  if (!hasCredit) {
+    return {
+      supported: true,
+      sufficient: false,
+      balance,
+      requiredCost,
+      shortfall,
+      response:
+        balanceCents <= 0
+          ? `Insufficient BulkSMSBD balance (৳0.00). Recharge before sending ${messageCount} messages.`
+          : `Insufficient BulkSMSBD balance: available ৳${balance.toFixed(2)} is less than estimated cost ৳${requiredCost.toFixed(2)} for ${messageCount} messages (short by ৳${shortfall.toFixed(2)}).`,
+    };
+  }
+
+  return {
+    supported: true,
+    sufficient: true,
+    balance,
+    requiredCost,
+    remaining,
+    response: `Balance available: ৳${balance.toFixed(2)} — sufficient to send all ${messageCount} messages (est. cost ৳${requiredCost.toFixed(2)}, remaining ~৳${remaining.toFixed(2)}).`,
+  };
+}
+
 // Dispatch a single SMS through the configured gateway
 export async function sendSingleSMS(
   recipient,

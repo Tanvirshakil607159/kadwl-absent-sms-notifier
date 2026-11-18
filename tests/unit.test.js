@@ -15,6 +15,7 @@ import { normalizeAttendanceDate } from "../src/utils/dates.js";
 import {
   sendSingleSMS,
   checkBulkSMSBDBalance,
+  checkGatewayBalanceForBatch,
   DEFAULT_GATEWAY_CONFIG,
   validateGateway,
 } from "../src/utils/smsService.js";
@@ -300,6 +301,49 @@ test("BulkSMSBD supports string codes, trims credentials, handles non-JSON error
     assert.equal(resFatal.success, false);
     assert.equal(resFatal.fatal, true);
     assert.match(resFatal.response, /1011/);
+  } finally {
+    global.fetch = original;
+  }
+});
+test("Pre-send batch balance availability check blocks insufficient or zero balance", async () => {
+  const sim = await checkGatewayBalanceForBatch(
+    { provider: "simulation" },
+    100,
+    50,
+  );
+  assert.equal(sim.supported, false);
+  assert.equal(sim.sufficient, true);
+
+  const original = global.fetch;
+  try {
+    global.fetch = async () =>
+      new Response(JSON.stringify({ response_code: 202, balance: 1.4 }));
+    const exactOk = await checkGatewayBalanceForBatch(
+      { provider: "bulksmsbd", apiKey: "k" },
+      1.4000000000000001,
+      2,
+    );
+    assert.equal(exactOk.sufficient, true);
+    assert.match(exactOk.response, /sufficient/i);
+
+    global.fetch = async () =>
+      new Response(JSON.stringify({ response_code: 202, balance: 1.0 }));
+    const short = await checkGatewayBalanceForBatch(
+      { provider: "bulksmsbd", apiKey: "k" },
+      1.4,
+      2,
+    );
+    assert.equal(short.sufficient, false);
+    assert.match(short.response, /Insufficient.*short by ৳0\.40/i);
+
+    global.fetch = async () =>
+      new Response(JSON.stringify({ response_code: 202, balance: 0 }));
+    const zero = await checkGatewayBalanceForBatch(
+      { provider: "bulksmsbd", apiKey: "k" },
+      0,
+      2,
+    );
+    assert.equal(zero.sufficient, false);
   } finally {
     global.fetch = original;
   }

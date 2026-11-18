@@ -262,16 +262,17 @@ test("Settings prefill BulkSMS, validate live keys, reset unsaved edits and do n
   );
   await expect(page.getByLabel("Rate per SMS part")).toHaveValue("0");
 });
-test("BulkSMSBD balance check, live send, and fatal error stops batch without looping", async ({
+test("BulkSMSBD balance check, pre-send sufficiency gate, live send, and fatal error stops batch without looping", async ({
   page,
 }) => {
   let smsRequests = 0;
   let mode = "ok";
+  let mockBalance = 0.5;
   await page.route("https://bulksmsbd.net/api/getBalanceApi", async (route) => {
     await route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify({ response_code: 202, balance: 2026.22 }),
+      body: JSON.stringify({ response_code: 202, balance: mockBalance }),
     });
   });
   await page.route("https://bulksmsbd.net/api/smsapi", async (route) => {
@@ -297,13 +298,29 @@ test("BulkSMSBD balance check, live send, and fatal error stops batch without lo
   await page.getByLabel("Sender ID", { exact: true }).fill(" 8809617600000 ");
   await page.getByLabel("Delay between messages (ms)").fill("0");
   await page.getByRole("button", { name: "Check API key & balance" }).click();
-  await expect(page.locator("#panel-settings")).toContainText("৳2026.22");
+  await expect(page.locator("#panel-settings")).toContainText("৳0.50");
   await page.getByRole("button", { name: "Save settings" }).click();
 
   await paste(page);
   await page.getByRole("button", { name: "Select valid phones" }).click();
   await page.getByRole("button", { name: /Compose for 2 selected/ }).click();
   await page.getByRole("button", { name: "Review & send SMS" }).click();
+  await expect(page.getByRole("dialog")).toContainText(
+    "Insufficient BulkSMSBD balance",
+  );
+  await expect(
+    page.getByRole("button", { name: "Send 2 messages" }),
+  ).toBeDisabled();
+  expect(smsRequests).toBe(0);
+
+  mockBalance = 2026.22;
+  await page.getByRole("button", { name: "Recheck balance" }).click();
+  await expect(page.getByRole("dialog")).toContainText(
+    "Balance available: ৳2026.22",
+  );
+  await expect(
+    page.getByRole("button", { name: "Send 2 messages" }),
+  ).toBeEnabled();
   await page.getByRole("button", { name: "Send 2 messages" }).click();
   await expect(
     page.getByRole("heading", { name: "Dispatch complete" }),
@@ -314,6 +331,9 @@ test("BulkSMSBD balance check, live send, and fatal error stops batch without lo
   mode = "fatal";
   smsRequests = 0;
   await page.getByRole("button", { name: "Review & send SMS" }).click();
+  await expect(page.getByRole("dialog")).toContainText(
+    "Balance available: ৳2026.22",
+  );
   await page.getByRole("button", { name: "Send 2 messages" }).click();
   await expect(
     page.getByRole("heading", { name: "Dispatch stopped" }),

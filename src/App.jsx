@@ -32,6 +32,7 @@ import {
 } from "./utils/smsUtils";
 import {
   DEFAULT_GATEWAY_CONFIG,
+  checkGatewayBalanceForBatch,
   sendSingleSMS,
   validateGateway,
 } from "./utils/smsService";
@@ -164,7 +165,8 @@ export default function App() {
   const [storageFailed, setStorageFailed] = useState(false);
   const timer = useRef(null),
     cancel = useRef(false),
-    running = useRef(false);
+    running = useRef(false),
+    reviewSeq = useRef(0);
   const busy = !!dispatch && !dispatch.isComplete;
   const simulation = gatewayConfig.provider === "simulation";
   const formattedDate = new Date(dateInput(absentDate) + "T12:00:00").toLocaleDateString(
@@ -209,6 +211,30 @@ export default function App() {
       `Imported ${rows.length} employees. Select recipients to prepare a message.`,
     );
   }
+  function verifyReviewBalance(config, cost, count) {
+    const reqId = ++reviewSeq.current;
+    setReview((prev) =>
+      prev ? { ...prev, balanceStatus: { state: "checking" } } : null,
+    );
+    checkGatewayBalanceForBatch(config, cost, count).then((result) => {
+      if (reviewSeq.current !== reqId) return;
+      setReview((prev) =>
+        prev
+          ? {
+              ...prev,
+              balanceStatus: {
+                state: result.sufficient ? "sufficient" : "insufficient",
+                ...result,
+              },
+            }
+          : null,
+      );
+    });
+  }
+  function closeReview() {
+    reviewSeq.current++;
+    setReview(null);
+  }
   function prepare(message, targets, dateLabel = formattedDate) {
     if (running.current || !message.trim()) return;
     const valid = targets.filter(
@@ -228,22 +254,59 @@ export default function App() {
       record,
       message: renderTemplate(message, record, dateLabel),
     }));
+    const cost = Number(
+      messages
+        .reduce(
+          (sum, item) =>
+            sum + calculateSMSStats(item.message, gatewayConfig.ratePerSMS).cost,
+          0,
+        )
+        .toFixed(2),
+    );
+    const configSnapshot = { ...gatewayConfig };
+    const isBulkSms = configSnapshot.provider === "bulksmsbd";
     setReview({
       messages,
       skipped: targets.length - valid.length,
-      cost: messages.reduce(
-        (sum, item) =>
-          sum + calculateSMSStats(item.message, gatewayConfig.ratePerSMS).cost,
-        0,
-      ),
-      config: { ...gatewayConfig },
+      cost,
+      config: configSnapshot,
+      balanceStatus: { state: isBulkSms ? "checking" : "not_applicable" },
     });
+    if (isBulkSms) {
+      verifyReviewBalance(configSnapshot, cost, messages.length);
+    }
   }
   async function send() {
     if (running.current || !review || !review.messages.length) return;
+    const batch = review;
+    if (batch.config.provider === "bulksmsbd") {
+      if (batch.balanceStatus?.state === "insufficient") {
+        notify(batch.balanceStatus.response || "Insufficient balance.");
+        return;
+      }
+      if (batch.balanceStatus?.state !== "sufficient") {
+        const balanceCheck = await checkGatewayBalanceForBatch(
+          batch.config,
+          batch.cost,
+          batch.messages.length,
+        );
+        if (!balanceCheck.sufficient) {
+          setReview((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  balanceStatus: { state: "insufficient", ...balanceCheck },
+                }
+              : null,
+          );
+          notify(balanceCheck.response);
+          return;
+        }
+      }
+    }
     running.current = true;
     cancel.current = false;
-    const batch = review;
+    reviewSeq.current++;
     setReview(null);
     setDispatch({
       progress: 0,
@@ -708,17 +771,26 @@ export default function App() {
               : "Review & send messages"
           }
           description={`${review.messages.length} recipients · Estimated live cost ৳${review.cost.toFixed(2)}`}
-          onClose={() => setReview(null)}
+          onClose={closeReview}
           footer={
             <>
-              <button className="btn" onClick={() => setReview(null)}>
+              <button className="btn" onClick={closeReview}>
                 Back to editing
               </button>
-              <button className="btn btn-primary" onClick={send}>
+              <button
+                className="btn btn-primary"
+                disabled={
+                  review.balanceStatus?.state === "checking" ||
+                  review.balanceStatus?.state === "insufficient"
+                }
+                onClick={send}
+              >
                 <Send size={16} />
                 {review.config.provider === "simulation"
                   ? "Start simulation"
-                  : `Send ${review.messages.length} messages`}
+                  : review.balanceStatus?.state === "checking"
+                    ? "Checking balance…"
+                    : `Send ${review.messages.length} messages`}
               </button>
             </>
           }
@@ -728,13 +800,43 @@ export default function App() {
               ? "Simulation only. No SMS will be sent and the actual charge is ৳0."
               : `Real messages will be submitted through ${review.config.provider}. Gateway acceptance does not guarantee delivery.`}
           </div>
+          {review.balanceStatus?.state === "checking" && (
+            <div className="info-note" role="status">
+              Checking BulkSMSBD balance availability for {review.messages.length}{" "}
+              messages…
+            </div>
+          )}
+          {review.balanceStatus?.state === "sufficient" && (
+            <div className="success-note" role="status">
+              {review.balanceStatus.response}
+            </div>
+          )}
+          {review.balanceStatus?.state === "insufficient" && (
+            <div className="error-note" role="alert">
+              <AlertCircle size={18} />
+              <span>{review.balanceStatus.response}</span>
+              <button
+                type="button"
+                className="btn"
+                onClick={() =>
+                  verifyReviewBalance(
+                    review.config,
+                    review.cost,
+                    review.messages.length,
+                  )
+                }
+              >
+                Recheck balance
+              </button>
+            </div>
+          )}
           {review.skipped > 0 && (
             <p className="warning-note">
               {review.skipped} invalid numbers will be skipped.
             </p>
           )}
           <div className="review-list">
-            {review.messages.map(({ record, message }) => (
+            {review.messages.slice(0, 100).map(({ record, message }) => (
               <article key={record.employeeId}>
                 <strong>{record.name}</strong>
                 <small>
@@ -744,6 +846,12 @@ export default function App() {
                 <p>{message}</p>
               </article>
             ))}
+            {review.messages.length > 100 && (
+              <p className="help-text">
+                Showing first 100 of {review.messages.length} recipients. All{" "}
+                {review.messages.length} will be processed on send.
+              </p>
+            )}
           </div>
         </Dialog>
       )}
